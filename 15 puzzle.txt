@@ -1,0 +1,228 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <limits.h>
+
+#define N 4 // Puzzle size
+
+// Struct to represent a puzzle state
+typedef struct {
+    int board[N][N]; // Puzzle board
+    int x, y; // Position of empty tile (0)
+    int cost; // Cost of the state
+    int level; // Level of the state in the search tree
+} PuzzleState;
+
+// Struct to represent a node in the priority queue
+typedef struct {
+    PuzzleState *state; // Pointer to the puzzle state
+    int priority; // Priority of the state in the queue
+} PQNode;
+
+// Priority queue implementation (min heap)
+typedef struct {
+    PQNode *array;
+    int capacity;
+    int size;
+} PriorityQueue;
+
+// Function to initialize the priority queue
+PriorityQueue* createPriorityQueue(int capacity) {
+    PriorityQueue *pq = (PriorityQueue*)malloc(sizeof(PriorityQueue));
+    pq->capacity = capacity;
+    pq->size = 0;
+    pq->array = (PQNode*)malloc(capacity * sizeof(PQNode));
+    return pq;
+}
+
+// Function to swap two nodes in the priority queue
+void swapNodes(PQNode *a, PQNode *b) {
+    PQNode temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+// Function to maintain the min heap property of the priority queue
+void heapify(PriorityQueue *pq, int index) {
+    int smallest = index;
+    int left = 2 * index + 1;
+    int right = 2 * index + 2;
+
+    if (left < pq->size && pq->array[left].priority < pq->array[smallest].priority)
+        smallest = left;
+
+    if (right < pq->size && pq->array[right].priority < pq->array[smallest].priority)
+        smallest = right;
+
+    if (smallest != index) {
+        swapNodes(&pq->array[index], &pq->array[smallest]);
+        heapify(pq, smallest);
+    }
+}
+
+// Function to check if the priority queue is empty
+bool isEmpty(PriorityQueue *pq) {
+    return pq->size == 0;
+}
+
+// Function to insert a puzzle state into the priority queue
+void insert(PriorityQueue *pq, PuzzleState *state, int priority) {
+    if (pq->size == pq->capacity) {
+        printf("Priority queue overflow\n");
+        return;
+    }
+
+    int i = pq->size++;
+    pq->array[i].state = state;
+    pq->array[i].priority = priority;
+
+    while (i != 0 && pq->array[(i - 1) / 2].priority > pq->array[i].priority) {
+        swapNodes(&pq->array[i], &pq->array[(i - 1) / 2]);
+        i = (i - 1) / 2;
+    }
+}
+
+// Function to extract the minimum priority node from the priority queue
+PQNode extractMin(PriorityQueue *pq) {
+    if (isEmpty(pq)) {
+        printf("Priority queue is empty\n");
+        PQNode nullNode;
+        nullNode.state = NULL;
+        nullNode.priority = INT_MAX;
+        return nullNode;
+    }
+
+    PQNode minNode = pq->array[0];
+    pq->array[0] = pq->array[pq->size - 1];
+    pq->size--;
+    heapify(pq, 0);
+    return minNode;
+}
+
+// Function to create a new puzzle state
+PuzzleState* createPuzzleState(int board[N][N], int x, int y, int cost, int level) {
+    PuzzleState *state = (PuzzleState*)malloc(sizeof(PuzzleState));
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            state->board[i][j] = board[i][j];
+            if (board[i][j] == 0) {
+                state->x = i;
+                state->y = j;
+            }
+        }
+    }
+    state->cost = cost;
+    state->level = level;
+    return state;
+}
+
+// Function to check if a given puzzle state is a solution
+bool isSolution(int board[N][N]) {
+    int count = 1;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            if (board[i][j] != count % (N * N)) {
+                return false;
+            }
+            count++;
+        }
+    }
+    return true;
+}
+
+// Function to calculate the cost of a puzzle state
+int calculateCost(int board[N][N]) {
+    int cost = 0;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            if (board[i][j] != 0) {
+                int x = (board[i][j] - 1) / N;
+                int y = (board[i][j] - 1) % N;
+                cost += abs(x - i) + abs(y - j);
+            }
+        }
+    }
+    return cost;
+}
+
+// Function to print the puzzle board
+void printBoard(int board[N][N]) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            printf("%2d ", board[i][j]);
+        }
+        printf("\n");
+    }
+}
+
+// Function to perform a move in the puzzle state (up, down, left, or right)
+void performMove(PuzzleState *state, int newX, int newY) {
+    state->board[state->x][state->y] = state->board[newX][newY];
+    state->board[newX][newY] = 0;
+    state->x = newX;
+    state->y = newY;
+}
+
+// Function to solve the Fifteen Puzzle using Branch and Bound algorithm
+void solveFifteenPuzzle(int initialBoard[N][N]) {
+    // Create initial puzzle state
+    PuzzleState *initialState = createPuzzleState(initialBoard, 0, 0, 0, 0);
+
+    // Initialize priority queue
+    PriorityQueue *pq = createPriorityQueue(10000);
+
+    // Insert initial state into priority queue
+    insert(pq, initialState, initialState->cost);
+
+    // Branch and Bound algorithm
+    while (!isEmpty(pq)) {
+        // Extract minimum cost state from priority queue
+        PQNode minNode = extractMin(pq);
+        PuzzleState *minState = minNode.state;
+
+        // Print current state (optional)
+        printf("Level: %d, Cost: %d\n", minState->level, minState->cost);
+        printBoard(minState->board);
+        printf("\n");
+
+        // Check if current state is a solution
+        if (isSolution(minState->board)) {
+            printf("Solution found!\n");
+            return;
+        }
+
+        // Generate child states by moving empty tile (0) in all possible directions
+        int newX, newY;
+        int directions[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}}; // Up, down, left, right
+        for (int i = 0; i < 4; i++) {
+            newX = minState->x + directions[i][0];
+            newY = minState->y + directions[i][1];
+            if (newX >= 0 && newX < N && newY >= 0 && newY < N) {
+                PuzzleState *childState = createPuzzleState(minState->board, minState->x, minState->y, minState->cost + 1, minState->level + 1);
+                performMove(childState, newX, newY);
+                insert(pq, childState, childState->cost + calculateCost(childState->board));
+            }
+        }
+    }
+
+    printf("No solution found\n");
+}
+
+// Function to take the initial board configuration from the user
+void inputInitialBoard(int initialBoard[N][N]) {
+    printf("Enter the initial board configuration (use space or newline to separate numbers):\n");
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            scanf("%d", &initialBoard[i][j]);
+        }
+    }
+}
+
+int main() {
+    int initialBoard[N][N];
+
+    inputInitialBoard(initialBoard);
+    solveFifteenPuzzle(initialBoard);
+
+    return 0;
+}
